@@ -1,0 +1,164 @@
+---
+title: "Assignment 2"
+author: "Briana Flynn"
+date: "9/22/2020"
+output: html_document
+---
+
+# Instructions
+
+Select a large area and create a map of the area, with its associated subareas, using each of three different map projections. Indicate the map projection you’ve used for each. Identify a variable and use at least three different methods to show how it varies among the subareas.
+
+# Loading Data & Identifying Area of Interest
+
+I began by loading a number of libraries and new packages. After loading a world map to R for the first time, I chose South America as the large area I would re-project, transform, and collect data for in this assignment. 
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(ggspatial)
+library(cartogram)
+library(ggthemes)
+library(rgdal)
+library(grid)
+```
+
+```{r}
+sacountries <- ne_countries(continent = "South America", returnclass = "sf")
+
+sa_map <-ggplot (sacountries) +
+  geom_sf() +
+  theme_bw()
+
+sa_map
+```
+
+# Representing South America Using Alternate Map Projections
+
+With South America as my chosen "large area" for Assignment 2, I looked for interesting and/or suitable map projections by searching for standard and then South America-focused projection systems. I settled on three projections:
+  
+  1. The Robinson Projection ("ROBINSON"): commonly used for a map projection of a world map which shows the entire  world at once, this projection is analagous to how South America might appear on a world map.
+  2. South America Albers Equal Area Conic Projection ("ALBERS"): a modified version of the Albers Equal Conic Area projection, this projection uses two standard parallels to reduce some of the distortion of a projection with one standard parallel. 
+  3. Cylindrical Equal Area Projection ("CEA"): meridians are mapped to equally spaces vertical lines and circles of latitude are mapped to horizontal lines.
+
+```{r}
+ROBINSON <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+ALBERS <- "+proj=lcc +lat_1=-5 +lat_2=-42 +lat_0=-32 +lon_0=-60 +x_0=0 +y_0=0 +ellps=aust_SA +units=m +no_defs"
+CEA <- "+proj=cea +lon_0=-60 +lat_ts=-5 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs"
+```
+
+
+## Robinson Projection
+
+```{r}
+ggplot(sacountries) +
+  geom_sf() +
+  coord_sf(crs = ROBINSON) +
+  theme_bw()
+```
+
+## Albers Equal Area Conic Projection
+
+```{r}
+ggplot(sacountries) +
+  geom_sf() +
+  coord_sf(crs = ALBERS) +
+  theme_bw()
+```
+
+## Cylndrical Equal Area Projection
+
+```{r}
+ggplot(sacountries) +
+  geom_sf() +
+  coord_sf(crs = CEA) +
+  theme_bw()
+```
+
+# Transforming the Map and Joining External Data
+
+Upon mapping South America with the three projections above, I transformed the map with the Albers projection for future mapping. I then pulled in data from the World Bank on the percentage of the population living in urban areas, 1960-2019. I joined the World Bank data with the transformed map. 
+
+```{r}
+SAcountries_transformed <- sacountries %>%
+  st_transform(crs = ALBERS)
+```
+
+```{r}
+urbanpop <- read_csv("UrbanPopDatav2.csv")
+```
+
+```{r}
+sacountries_urbanpop <- SAcountries_transformed %>%
+  left_join(urbanpop, by = c("name" = "CountryName")) %>%
+  select(name, UrbanPop1960, UrbanPop2019)
+```
+
+```{r}
+data.frame(sacountries_urbanpop)
+```
+
+# Representing Urban Population Variable for South American Countries
+
+## Mapping Percentage Urban Population with Gradient Color
+
+```{r}
+ ggplot(sacountries_urbanpop, aes(fill = UrbanPop2019)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(option = "inferno", 
+    name = "Percentage of\npopulation\nliving in\nurban\nareas 2019",
+    breaks = seq(0, 100, by = 10),
+    labels = formatC(seq(0, 100, by = 10), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank(),legend.position="right", 
+        legend.title = element_text(size=9))
+```
+
+Note: Falkand Islands was excluded from the World Bank dataset.
+
+## Mapping Percentage Urban Population with a Cartogram
+
+```{r}
+SAcountries_transformed = na.omit(SAcountries_transformed)
+```
+
+```{r}
+sacountries_urbanpop = na.omit(sacountries_urbanpop)
+```
+
+```{r message=FALSE, warning=FALSE}
+UrbanPopCartogramCont <- sacountries_urbanpop %>%
+  cartogram_cont("UrbanPop2019")
+
+ggplot(UrbanPopCartogramCont, aes(fill = UrbanPop2019)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(option = "inferno",
+     name = "Percentage of\npopulation\nliving in\nurban\nareas 2019",
+    breaks = seq(0, 100, by = 10),
+    labels = formatC(seq(0, 100, by = 10), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank(),legend.position="right", 
+        legend.title = element_text(size=9))
+```
+
+## Mapping Percentage Urban Population with a Non-continuous Cartogram
+
+```{r message=FALSE, warning=FALSE}
+urbanpop_cartogram_ncont <- sacountries_urbanpop %>%
+  cartogram_ncont("UrbanPop2019")
+
+ggplot(urbanpop_cartogram_ncont, aes(fill = UrbanPop2019)) +
+ geom_sf(color = NA) +
+  scale_fill_viridis_c(option = "inferno",
+     name = "Percentage of\npopulation\nliving in\nurban\nareas 2019",
+    breaks = seq(0, 100, by = 10),
+    labels = formatC(seq(0, 100, by = 10), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank(),legend.position="right", 
+        legend.title = element_text(size=9))
+```
